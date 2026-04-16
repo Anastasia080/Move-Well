@@ -1,0 +1,35 @@
+# Виртуальное окружение
+venv/
+env/
+ENV/
+.env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Логи и временные файлы
+*.log
+*.tmp
+temp/
+Temp/
+
+# Файлы с секретами
+.env
+.secrets
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+
+# Файлы, создаваемые при установке пакетов
+*.egg-info/
+dist/
+build/
