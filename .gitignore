@@ -1,0 +1,9 @@
+﻿models/
+*.caffemodel
+*.prototxt
+reference_videos/
+venv/
+__pycache__/
+*.pyc
+*.mp4
+*.webm
