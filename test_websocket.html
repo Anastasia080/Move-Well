@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MoveWell - Анализ упражнений с OpenPose</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: auto; }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .section { 
+            background: white; 
+            padding: 20px; 
+            margin: 15px 0; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        }
+        .section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .video-container { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 20px; 
+            justify-content: center; 
+        }
+        .video-box { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+            flex: 1;
+            min-width: 350px;
+        }
+        video, canvas { 
+            border: 2px solid #333; 
+            border-radius: 8px;
+            background: #000; 
+            display: block; 
+            max-width: 100%;
+            height: auto;
+        }
+        button { 
+            padding: 10px 20px; 
+            margin: 5px; 
+            cursor: pointer; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 14px; 
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        button:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        button.primary { background: #667eea; color: white; }
+        button.primary:hover { background: #5a67d8; }
+        button.danger { background: #dc3545; color: white; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; color: white; }
+        button.success:hover { background: #218838; }
+        button.warning { background: #ffc107; color: #333; }
+        button.warning:hover { background: #e0a800; }
+        
+        .result { 
+            margin-top: 20px; 
+            padding: 20px; 
+            border-radius: 8px; 
+            display: none;
+        }
+        .good { background: #d4edda; color: #155724; border-left: 5px solid #28a745; }
+        .needs_improvement { background: #fff3cd; color: #856404; border-left: 5px solid #ffc107; }
+        .poor { background: #f8d7da; color: #721c24; border-left: 5px solid #dc3545; }
+        
+        .status { 
+            padding: 10px; 
+            margin-top: 10px; 
+            border-radius: 6px; 
+            font-size: 14px; 
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .status.analyzing { background: #cce5ff; color: #004085; }
+        
+        input, select { 
+            padding: 10px; 
+            margin: 5px; 
+            border-radius: 6px; 
+            border: 1px solid #ddd; 
+            font-size: 14px;
+        }
+        input[type="file"] { 
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        
+        .controls { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 10px; 
+            align-items: center; 
+            margin: 10px 0; 
+        }
+        .progress-bar { 
+            width: 100%; 
+            height: 6px; 
+            background: #e0e0e0; 
+            margin-top: 10px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-fill { 
+            height: 100%; 
+            background: linear-gradient(90deg, #667eea, #764ba2); 
+            width: 0%; 
+            transition: width 0.3s; 
+        }
+        .joints-info { 
+            font-size: 13px; 
+            color: #666; 
+            margin-top: 5px; 
+            background: #f0f0f0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        
+        .report-container { 
+            background: #1e1e1e; 
+            border-radius: 8px; 
+            padding: 20px; 
+            margin-top: 20px; 
+        }
+        .report-text { 
+            color: #d4d4d4; 
+            font-family: 'Consolas', 'Courier New', monospace; 
+            font-size: 13px; 
+            white-space: pre-wrap; 
+            max-height: 400px; 
+            overflow-y: auto; 
+            padding: 15px;
+            line-height: 1.5;
+        }
+        .copy-btn { 
+            margin-top: 10px; 
+            background: #6c757d; 
+            color: white; 
+            padding: 8px 15px;
+        }
+        .copy-btn:hover { background: #5a6268; }
+        
+        .debug-panel { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            margin-top: 10px; 
+            border-radius: 8px; 
+            font-size: 12px; 
+            font-family: monospace; 
+            max-height: 200px; 
+            overflow-y: auto; 
+        }
+        .debug-panel h4 { margin: 0 0 10px 0; font-size: 14px; color: #333; }
+        .debug-log { color: #333; }
+        .debug-error { color: #dc3545; font-weight: bold; }
+        .debug-success { color: #28a745; font-weight: bold; }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background: white;
+            color: #667eea;
+            font-weight: bold;
+        }
+        .tab:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        .comparison-result {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            text-align: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .metric-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .reference-video-box {
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        .reference-video-box h4 {
+            color: #e65100;
+            margin: 0 0 10px 0;
+        }
+        .source-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .source-tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .source-tab.active {
+            background: #667eea;
+            color: white;
+        }
+        .source-tab:not(.active) {
+            background: #e0e0e0;
+            color: #333;
+        }
+        .recording-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #dc3545;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+            margin-right: 5px;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🏋️ MoveWell - Анализ упражнений с OpenPose</h1>
+    
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('realtime')">📹 Real-time анализ</div>
+        <div class="tab" onclick="switchTab('comparison')">🔄 Сравнение с эталоном</div>
+    </div>
+    
+    <!-- ===== РЕЖИМ 1: REAL-TIME АНАЛИЗ ===== -->
+    <div id="realtimeTab" class="tab-content active">
+        <div class="section">
+            <h3>🔌 1. Подключение к серверу</h3>
+            <div class="controls">
+                <label>Токен:</label>
+                <input type="text" id="token" style="width: 250px" placeholder="jwt_token" value="demo_token_123">
+                <label>Упражнение:</label>
+                <select id="exercise">
+                    <option value="squat">🦵 Приседания</option>
+                    <option value="pushup">💪 Отжимания</option>
+                    <option value="plank">🧘 Планка</option>
+                </select>
+                <button onclick="connect()" class="primary">🔌 Подключиться</button>
+                <button onclick="disconnect()" class="danger">❌ Отключиться</button>
+            </div>
+            <div id="wsStatus" class="status disconnected">⚫ Не подключено</div>
+        </div>
+
+        <div class="section">
+            <h3>📹 2. Источник видео</h3>
+            <div class="controls">
+                <button onclick="document.getElementById('videoFile').click()" class="success">📁 Загрузить видеофайл</button>
+                <input type="file" id="videoFile" accept="video/*" style="display:none" onchange="handleVideoUpload(event)">
+                <button onclick="startCamera()" class="warning">🎥 Записать с камеры</button>
+                <button onclick="stopVideo()" class="danger">⏹️ Остановить</button>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🦴 3. Анализ через OpenPose</h3>
+            <div class="controls">
+                <button onclick="startAnalysis()" id="startBtn" class="success">▶️ Начать анализ</button>
+                <button onclick="stopAnalysis()" id="stopBtn" disabled class="danger">⏸️ Остановить</button>
+                <select id="intervalSelect">
+                    <option value="500">⚡ 0.5 сек</option>
+                    <option value="1000" selected>🟢 1 сек</option>
+                    <option value="1500">🐢 1.5 сек</option>
+                </select>
+                <label>🎨 Показывать скелет: <input type="checkbox" id="showSkeleton" checked></label>
+            </div>
+        </div>
+
+        <div class="video-container">
+            <div class="video-box">
+                <h3>📹 Исходное видео</h3>
+                <video id="sourceVideo" width="480" height="360" controls muted></video>
+            </div>
+            <div class="video-box">
+                <h3>🦴 OpenPose + Скелет</h3>
+                <canvas id="skeletonCanvas" width="480" height="360"></canvas>
+                <div class="joints-info" id="jointsInfo">💡 Ожидание анализа...</div>
+            </div>
+        </div>
+
+        <div id="result" class="result">💡 Ожидание анализа...</div>
+
+        <div id="reportSection" style="display: none;">
+            <div class="report-container">
+                <h3 style="color: white; margin-top: 0;">📋 Детальный отчет OpenPose</h3>
+                <div id="textReport" class="report-text"></div>
+                <button class="copy-btn" onclick="copyReport()">📋 Копировать отчет</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ===== РЕЖИМ 2: СРАВНЕНИЕ С ЭТАЛОНОМ ===== -->
+    <div id="comparisonTab" class="tab-content">
+        <div class="section">
+            <h3>🔄 Сравнение с эталонным видео</h3>
+            <p style="color: #666;">
+                Эталонные видео уже загружены на сервер. Выберите упражнение, загрузите или запишите свое видео.
+            </p>
+            
+            <!-- Выбор упражнения -->
+            <div style="margin: 20px 0;">
+                <label style="font-weight: bold; font-size: 16px;">Выберите упражнение:</label>
+                <select id="comparisonExercise" style="margin-left: 10px; font-size: 16px; padding: 10px;" onchange="onExerciseChange()">
+                    <option value="">-- Выберите упражнение --</option>
+                    <option value="squat">🦵 Приседания</option>
+                    <option value="pushup">💪 Отжимания</option>
+                    <option value="lunge">🏃 Выпады</option>
+                    <option value="stretching">🧘 Растяжка</option>
+                    <option value="plank">🧘 Планка</option>
+                    <option value="general">🏋️ Общее упражнение</option>
+                </select>
+            </div>
+            
+            <!-- Плеер эталонного видео -->
+            <div class="reference-video-box" id="referenceVideoBox" style="display: none;">
+                <h4>🎯 Эталонное видео</h4>
+                <video id="referenceVideoPlayer" width="480" height="360" controls>
+                    Ваш браузер не поддерживает видео.
+                </video>
+                <div id="referenceVideoInfo" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
+            </div>
+            
+            <!-- Загрузка/запись видео пользователя -->
+            <div style="margin: 20px 0; padding: 20px; border: 2px dashed #ccc; border-radius: 8px;">
+                <h4>📹 Ваше видео</h4>
+                
+                <!-- Табы для выбора источника -->
+                <div class="source-tabs">
+                    <div id="tabUpload" class="source-tab active" onclick="switchVideoSource('upload')">
+                        📁 Загрузить файл
+                    </div>
+                    <div id="tabRecord" class="source-tab" onclick="switchVideoSource('record')">
+                        🎥 Записать с камеры
+                    </div>
+                </div>
+                
+                <!-- Режим загрузки файла -->
+                <div id="uploadMode">
+                    <p style="color: #999;">Видео должно показывать вас в полный рост при выполнении упражнения</p>
+                    <input type="file" id="userVideoForComparison" accept="video/*" onchange="handleUserVideoOnly(event)" style="font-size: 16px;">
+                    <video id="userVideoPreviewOnly" width="400" controls style="display:none; margin: 15px auto 0;"></video>
+                    <div id="userVideoInfo" style="margin-top: 10px; color: #666; font-size: 14px;"></div>
+                </div>
+                
+                <!-- Режим записи с камеры -->
+                <div id="recordMode" style="display: none;">
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 300px;">
+                            <h5 style="margin: 0 0 10px 0;">📷 Камера</h5>
+                            <video id="cameraPreview" width="400" height="300" autoplay muted style="background: #000; border-radius: 8px;"></video>
+                            <div style="margin-top: 10px;">
+                                <button id="startRecordingBtn" onclick="startRecording()" class="success">
+                                    ⏺️ Начать запись
+                                </button>
+                                <button id="stopRecordingBtn" onclick="stopRecording()" class="danger" disabled>
+                                    ⏹️ Остановить
+                                </button>
+                                <span id="recordingTimer" style="margin-left: 15px; font-size: 16px; color: #dc3545; display: none;">
+                                    <span class="recording-indicator"></span> 00:00
+                                </span>
+                            </div>
+                        </div>
+                        <div style="flex: 1; min-width: 300px;">
+                            <h5 style="margin: 0 0 10px 0;">📼 Записанное видео</h5>
+                            <video id="recordedVideoPreview" width="400" height="300" controls style="background: #000; border-radius: 8px; display: none;"></video>
+                            <div id="recordedVideoInfo" style="margin-top: 10px; color: #666; font-size: 14px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Кнопка сравнения -->
+            <div style="margin-top: 20px; text-align: center;">
+                <button onclick="startVideoComparisonWithServerReference()" id="compareBtnNew" class="success" disabled style="font-size: 18px; padding: 15px 30px;">
+                    🔍 Сравнить с эталоном
+                </button>
+                <div id="comparisonStatusNew" style="margin-top: 15px; font-size: 14px; color: #666;"></div>
+            </div>
+        </div>
+        
+        <!-- Результаты сравнения -->
+        <div id="comparisonResult" class="result" style="display: none;">
+            <h3>📊 Результаты сравнения</h3>
+            <div id="comparisonData"></div>
+        </div>
+    </div>
+    
+    <!-- Панель отладки -->
+    <div class="debug-panel">
+        <h4>🔍 Отладка</h4>
+        <div id="debugLog"></div>
+    </div>
+</div>
+
+<script>
+    // ===== ПЕРЕКЛЮЧЕНИЕ ТАБОВ =====
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        
+        document.getElementById(tabName + 'Tab').classList.add('active');
+        event.target.classList.add('active');
+        
+        if (tabName === 'comparison') {
+            stopAnalysis();
+            loadAvailableReferences();
+        }
+    }
+    
+    // ===== ОТЛАДКА =====
+    function debugLog(msg, type = 'info') {
+        const debugDiv = document.getElementById('debugLog');
+        const timestamp = new Date().toLocaleTimeString();
+        const color = type === 'error' ? 'debug-error' : (type === 'success' ? 'debug-success' : 'debug-log');
+        debugDiv.innerHTML += `<div class="${color}">[${timestamp}] ${msg}</div>`;
+        debugDiv.scrollTop = debugDiv.scrollHeight;
+        console.log(msg);
+    }
+    
+    // ===== ФУНКЦИИ ДЛЯ СРАВНЕНИЯ =====
+    
+    function onExerciseChange() {
+        const exercise = document.getElementById('comparisonExercise').value;
+        if (!exercise) return;
+        loadReferenceVideo(exercise);
+    }
+    
+    async function loadReferenceVideo(exercise) {
+        const videoBox = document.getElementById('referenceVideoBox');
+        const videoPlayer = document.getElementById('referenceVideoPlayer');
+        const videoInfo = document.getElementById('referenceVideoInfo');
+        
+        const videoUrl = `/static/reference_videos/${exercise}_reference.mp4`;
+        
+        videoPlayer.src = videoUrl;
+        videoBox.style.display = 'block';
+        videoInfo.innerHTML = `Упражнение: ${exercise}`;
+        
+        videoPlayer.onloadeddata = () => {
+            debugLog(`Эталонное видео загружено: ${exercise}`, 'success');
+        };
+        
+        videoPlayer.onerror = () => {
+            debugLog(`Эталонное видео не найдено: ${videoUrl}`, 'error');
+            videoInfo.innerHTML += '<br><span style="color: #dc3545;">⚠️ Видео не загрузилось</span>';
+        };
+    }
+    
+    async function loadAvailableReferences() {
+        try {
+            const response = await fetch('/api/reference-exercises');
+            const data = await response.json();
+            
+            if (data.exercises && data.exercises.length > 0) {
+                debugLog(`Доступно эталонов: ${data.available_count} из ${data.total}`, 'success');
+                
+                const firstAvailable = data.exercises.find(e => e.has_reference);
+                if (firstAvailable) {
+                    document.getElementById('comparisonExercise').value = firstAvailable.exercise;
+                    loadReferenceVideo(firstAvailable.exercise);
+                }
+            } else {
+                debugLog('Нет доступных эталонов', 'error');
+            }
+        } catch (err) {
+            debugLog('Ошибка загрузки списка эталонов: ' + err.message, 'error');
+        }
+    }
+    
+    // ===== ПЕРЕКЛЮЧЕНИЕ ИСТОЧНИКА ВИДЕО (ФАЙЛ/КАМЕРА) =====
+    let currentVideoSource = 'upload';
+    
+    function switchVideoSource(source) {
+        currentVideoSource = source;
+        
+        const tabUpload = document.getElementById('tabUpload');
+        const tabRecord = document.getElementById('tabRecord');
+        const uploadMode = document.getElementById('uploadMode');
+        const recordMode = document.getElementById('recordMode');
+        
+        if (source === 'upload') {
+            tabUpload.classList.add('active');
+            tabRecord.classList.remove('active');
+            uploadMode.style.display = 'block';
+            recordMode.style.display = 'none';
+            stopCamera();
+        } else {
+            tabRecord.classList.add('active');
+            tabUpload.classList.remove('active');
+            uploadMode.style.display = 'none';
+            recordMode.style.display = 'block';
+            startCameraPreview();
+        }
+        
+        // Сбрасываем видео
+        userVideoForComparison = null;
+        document.getElementById('compareBtnNew').disabled = true;
+        document.getElementById('comparisonStatusNew').innerHTML = '';
+    }
+    
+    // ===== ЗАПИСЬ С КАМЕРЫ =====
+    let cameraStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordingStartTime = null;
+    let recordingTimerInterval = null;
+    let userVideoForComparison = null;
+    
+    async function startCameraPreview() {
+        try {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+            
+            cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    facingMode: 'user'
+                }, 
+                audio: false 
+            });
+            
+            const cameraPreview = document.getElementById('cameraPreview');
+            cameraPreview.srcObject = cameraStream;
+            await cameraPreview.play();
+            
+            debugLog('Камера запущена', 'success');
+        } catch (err) {
+            alert('Ошибка доступа к камере: ' + err.message);
+            debugLog('Ошибка камеры: ' + err.message, 'error');
+        }
+    }
+    
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        const cameraPreview = document.getElementById('cameraPreview');
+        if (cameraPreview.srcObject) {
+            cameraPreview.srcObject = null;
+        }
+    }
+    
+    async function startRecording() {
+        if (!cameraStream) {
+            await startCameraPreview();
+        }
+        
+        if (!cameraStream) {
+            alert('Не удалось получить доступ к камере');
+            return;
+        }
+        
+        try {
+            recordedChunks = [];
+            
+            let mimeType = 'video/webm;codecs=vp8';
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                mimeType = 'video/webm';
+            }
+            
+            mediaRecorder = new MediaRecorder(cameraStream, { mimeType: mimeType });
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                
+                const recordedVideo = document.getElementById('recordedVideoPreview');
+                recordedVideo.src = URL.createObjectURL(blob);
+                recordedVideo.style.display = 'block';
+                
+                const duration = recordingStartTime ? 
+                    ((Date.now() - recordingStartTime) / 1000).toFixed(1) : '0';
+                document.getElementById('recordedVideoInfo').innerHTML = 
+                    `✅ Записано: ${duration} сек | ${(blob.size / 1024 / 1024).toFixed(1)} MB`;
+                
+                userVideoForComparison = new File([blob], `recorded_${Date.now()}.webm`, { 
+                    type: 'video/webm' 
+                });
+                
+                document.getElementById('compareBtnNew').disabled = false;
+                document.getElementById('comparisonStatusNew').innerHTML = 
+                    '✅ Видео записано. Нажмите "Сравнить с эталоном"';
+                
+                debugLog(`Запись завершена: ${duration} сек`, 'success');
+            };
+            
+            mediaRecorder.start(100);
+            
+            recordingStartTime = Date.now();
+            
+            document.getElementById('startRecordingBtn').disabled = true;
+            document.getElementById('stopRecordingBtn').disabled = false;
+            document.getElementById('recordingTimer').style.display = 'inline';
+            
+            updateRecordingTimer();
+            recordingTimerInterval = setInterval(updateRecordingTimer, 1000);
+            
+            debugLog('Запись началась', 'success');
+            
+        } catch (err) {
+            alert('Ошибка начала записи: ' + err.message);
+            debugLog('Ошибка записи: ' + err.message, 'error');
+        }
+    }
+    
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        
+        if (recordingTimerInterval) {
+            clearInterval(recordingTimerInterval);
+            recordingTimerInterval = null;
+        }
+        
+        document.getElementById('startRecordingBtn').disabled = false;
+        document.getElementById('stopRecordingBtn').disabled = true;
+        document.getElementById('recordingTimer').style.display = 'none';
+        
+        debugLog('Запись остановлена', 'success');
+    }
+    
+    function updateRecordingTimer() {
+        if (!recordingStartTime) return;
+        
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+        const seconds = (elapsed % 60).toString().padStart(2, '0');
+        
+        document.getElementById('recordingTimer').innerHTML = 
+            `<span class="recording-indicator"></span> ${minutes}:${seconds}`;
+    }
+    
+    // ===== ЗАГРУЗКА ИЗ ФАЙЛА =====
+    function handleUserVideoOnly(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        userVideoForComparison = file;
+        const video = document.getElementById('userVideoPreviewOnly');
+        video.src = URL.createObjectURL(file);
+        video.style.display = 'block';
+        
+        document.getElementById('userVideoInfo').innerHTML = 
+            `✅ ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)`;
+        
+        document.getElementById('compareBtnNew').disabled = false;
+        document.getElementById('comparisonStatusNew').innerHTML = 
+            '✅ Видео загружено. Нажмите "Сравнить с эталоном"';
+        
+        debugLog(`Видео загружено: ${file.name}`, 'success');
+    }
+    
+    // ===== СРАВНЕНИЕ С ЭТАЛОНОМ =====
+    async function startVideoComparisonWithServerReference() {
+        if (!userVideoForComparison) {
+            alert('Загрузите или запишите видео');
+            return;
+        }
+        
+        const exercise = document.getElementById('comparisonExercise').value;
+        if (!exercise) {
+            alert('Выберите упражнение');
+            return;
+        }
+        
+        const compareBtn = document.getElementById('compareBtnNew');
+        const statusDiv = document.getElementById('comparisonStatusNew');
+        const resultDiv = document.getElementById('comparisonResult');
+        const comparisonData = document.getElementById('comparisonData');
+        
+        compareBtn.disabled = true;
+        resultDiv.style.display = 'none';
+        statusDiv.innerHTML = '⏳ Идет анализ видео... Это может занять 1-2 минуты...';
+        
+        const formData = new FormData();
+        formData.append('user_video', userVideoForComparison);
+        formData.append('exercise', exercise);
+        
+        try {
+            const response = await fetch('/api/compare-videos', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Ошибка сервера: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.status === 'error') {
+                throw new Error(data.message);
+            }
+            
+            comparisonData.innerHTML = `
+                <div class="comparison-result">
+                    <div class="metric-card" style="background: #e3f2fd;">
+                        <div class="metric-label">Общая схожесть</div>
+                        <div class="metric-value" style="color: #1976d2;">${data.overall_similarity}%</div>
+                        <div style="font-size: 12px; color: #666;">${data.total_comparisons} кадров</div>
+                    </div>
+                    <div class="metric-card" style="background: #f3e5f5;">
+                        <div class="metric-label">Оценка</div>
+                        <div class="metric-value" style="color: #7b1fa2; font-size: 24px;">${data.rating || 'Н/Д'}</div>
+                    </div>
+                    <div class="metric-card" style="background: #e8f5e9;">
+                        <div class="metric-label">Упражнение</div>
+                        <div class="metric-value" style="color: #388e3c; font-size: 20px;">${exercise}</div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #fff3e0; border-radius: 8px; border-left: 4px solid #ff9800;">
+                    <strong>💬 Рекомендации:</strong><br>${data.feedback || 'Нет рекомендаций'}
+                </div>
+                
+                ${data.best_match ? `
+                <div style="margin-top: 15px; padding: 15px; background: #e8f5e9; border-radius: 8px;">
+                    <strong>✅ Лучшее совпадение:</strong> ${data.best_match.similarity}% (кадр #${data.best_match.user_frame})
+                </div>` : ''}
+                
+                ${data.worst_match ? `
+                <div style="margin-top: 10px; padding: 15px; background: #ffebee; border-radius: 8px;">
+                    <strong>⚠️ Худшее совпадение:</strong> ${data.worst_match.similarity}% (кадр #${data.worst_match.user_frame})
+                </div>` : ''}
+            `;
+            
+            resultDiv.style.display = 'block';
+            statusDiv.innerHTML = '✅ Сравнение завершено!';
+            
+        } catch (error) {
+            statusDiv.innerHTML = `❌ Ошибка: ${error.message}`;
+            comparisonData.innerHTML = `
+                <div style="color: #721c24; padding: 20px; background: #ffebee; border-radius: 8px;">
+                    <strong>❌ Ошибка:</strong> ${error.message}
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        } finally {
+            compareBtn.disabled = false;
+        }
+    }
+    
+    // ===== REAL-TIME АНАЛИЗ =====
+    let ws = null;
+    let sourceVideo = document.getElementById('sourceVideo');
+    let skeletonCanvas = document.getElementById('skeletonCanvas');
+    let ctx = skeletonCanvas.getContext('2d');
+    let analysisInterval = null;
+    let mediaStream = null;
+    let isAnalyzing = false;
+    let currentFrameNumber = 0;
+    
+    function connect() {
+        const token = document.getElementById('token').value;
+        const exercise = document.getElementById('exercise').value;
+        
+        if (!token) { alert('Введите токен'); return; }
+        if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+        
+        ws = new WebSocket(`ws://localhost:8000/ws/analyze/${exercise}`);
+        
+        ws.onopen = () => {
+            updateStatus('✅ Подключено к серверу', 'connected');
+            ws.send(JSON.stringify({ token: token }));
+            debugLog('WebSocket открыт', 'success');
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `
+                <strong>Статус:</strong> ${data.status}<br>
+                <strong>Оценка:</strong> ${data.score}%<br>
+                <strong>Фидбек:</strong> ${data.feedback}<br>
+                <strong>Точек:</strong> ${data.joints_detected || 0}/18
+            `;
+            resultDiv.className = `result ${data.status}`;
+            resultDiv.style.display = 'block';
+            
+            if (data.skeleton_image) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+                    ctx.drawImage(img, 0, 0, skeletonCanvas.width, skeletonCanvas.height);
+                };
+                img.src = `data:image/jpeg;base64,${data.skeleton_image}`;
+            }
+            
+            updateReport(data);
+        };
+        
+        ws.onclose = () => { updateStatus('❌ Отключено', 'disconnected'); stopAnalysis(); };
+        ws.onerror = () => { updateStatus('⚠️ Ошибка', 'disconnected'); };
+    }
+    
+    function disconnect() { if (ws) ws.close(); stopAnalysis(); }
+    
+    function updateStatus(text, className) {
+        const statusDiv = document.getElementById('wsStatus');
+        statusDiv.innerHTML = text;
+        statusDiv.className = `status ${className}`;
+    }
+    
+    function handleVideoUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        stopVideo(); stopAnalysis();
+        
+        const url = URL.createObjectURL(file);
+        sourceVideo.src = url;
+        sourceVideo.controls = true;
+        sourceVideo.muted = false;
+        
+        sourceVideo.onloadedmetadata = () => {
+            skeletonCanvas.width = sourceVideo.videoWidth;
+            skeletonCanvas.height = sourceVideo.videoHeight;
+            sourceVideo.play();
+            updateProgress(0);
+        };
+        
+        sourceVideo.onended = () => { if (isAnalyzing) stopAnalysis(); updateProgress(100); };
+    }
+    
+    async function startCamera() {
+        stopVideo(); stopAnalysis();
+        
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            sourceVideo.srcObject = mediaStream;
+            sourceVideo.muted = true;
+            sourceVideo.controls = false;
+            await sourceVideo.play();
+            
+            skeletonCanvas.width = sourceVideo.videoWidth;
+            skeletonCanvas.height = sourceVideo.videoHeight;
+        } catch (err) {
+            alert('Ошибка доступа к камере: ' + err.message);
+        }
+    }
+    
+    function stopVideo() {
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        if (sourceVideo.srcObject) sourceVideo.srcObject = null;
+        if (sourceVideo.src) { URL.revokeObjectURL(sourceVideo.src); sourceVideo.src = ''; }
+        sourceVideo.pause();
+        updateProgress(0);
+    }
+    
+    async function startAnalysis() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            alert('Сначала подключитесь к серверу');
+            return;
+        }
+        
+        if (!sourceVideo.srcObject && !sourceVideo.src && !sourceVideo.currentSrc) {
+            alert('Загрузите видео или включите камеру');
+            return;
+        }
+        
+        if (sourceVideo.paused || sourceVideo.ended) sourceVideo.play();
+        if (analysisInterval) clearInterval(analysisInterval);
+        
+        isAnalyzing = true;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+        updateStatus('🟢 Анализ активен', 'analyzing');
+        
+        const intervalMs = parseInt(document.getElementById('intervalSelect').value);
+        
+        analysisInterval = setInterval(() => {
+            if (!isAnalyzing) return;
+            
+            if (sourceVideo.readyState >= 2 && !sourceVideo.paused && sourceVideo.videoWidth > 0) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = sourceVideo.videoWidth;
+                tempCanvas.height = sourceVideo.videoHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(sourceVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+                
+                const base64Image = tempCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                currentFrameNumber++;
+                
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ image: base64Image, frame: currentFrameNumber }));
+                }
+                
+                if (sourceVideo.duration) {
+                    updateProgress((sourceVideo.currentTime / sourceVideo.duration) * 100);
+                }
+            } else if (sourceVideo.ended) {
+                stopAnalysis();
+                alert('✅ Анализ завершён');
+            }
+        }, intervalMs);
+    }
+    
+    function stopAnalysis() {
+        if (analysisInterval) { clearInterval(analysisInterval); analysisInterval = null; }
+        isAnalyzing = false;
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').disabled = true;
+        updateStatus('⏸️ Анализ остановлен', 'connected');
+    }
+    
+    function updateProgress(percent) {
+        document.getElementById('progressFill').style.width = `${percent}%`;
+    }
+    
+    function updateReport(data) {
+        const reportSection = document.getElementById('reportSection');
+        reportSection.style.display = 'block';
+        
+        const textReport = document.getElementById('textReport');
+        textReport.innerHTML = `
+Статус: ${data.status}
+Оценка: ${data.score}%
+Точек: ${data.joints_detected || 0}/18
+Фидбек: ${data.feedback}
+Ошибки: ${(data.errors || []).length > 0 ? data.errors.map(e => e.error || e).join(', ') : 'нет'}
+        `;
+    }
+    
+    function copyReport() {
+        const text = document.getElementById('textReport').innerText;
+        navigator.clipboard.writeText(text).then(() => alert('Скопировано!'));
+    }
+    
+    // ===== ИНИЦИАЛИЗАЦИЯ =====
+    window.addEventListener('load', () => {
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, 0, skeletonCanvas.width, skeletonCanvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px Arial';
+        ctx.fillText('Ожидание подключения...', 50, 180);
+        debugLog('Страница загружена', 'success');
+    });
+    
+    window.addEventListener('beforeunload', () => {
+        if (ws) ws.close();
+        stopCamera();
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        if (recordingTimerInterval) {
+            clearInterval(recordingTimerInterval);
+        }
+        if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+        if (analysisInterval) clearInterval(analysisInterval);
+    });
+</script>
+</body>
+</html>
