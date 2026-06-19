@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,19 +6,21 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import BottomMenu from './BottomMenu';
 import Category from './Category/Category';
 import { useTheme } from './ThemeContext';
-import { useFavorite } from './FavoriteContext';
 import SearchBox from './SearchBox';
+import { apiService, Exercise } from '../services/api';
 
-type Video = {
-  id: number;
-  title: string;
-  description: string;
+const thumbnailByCategory: { [key: string]: any } = {
+  body: require('../assets/sample_body.jpg'),
+  hands: require('../assets/sample_hands.jpg'),
+  legs: require('../assets/sample_legs.jpg'),
 };
 
 type RootStackParamList = {
@@ -26,189 +28,295 @@ type RootStackParamList = {
   Main: undefined;
   Favorite: undefined;
   Settings: undefined;
-  ShowVideo: { video: Video };
+  ShowVideo: { video: Exercise };
 };
-type MainScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
+
+type MainScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Main'
+>;
 
 const Main = () => {
   const navigation = useNavigation<MainScreenNavigationProp>();
   const { colors } = useTheme();
   const [search, setSearch] = useState('');
-  const { toggleFavorite, isFavorite } = useFavorite();
-  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [recommended, setRecommended] = useState<Exercise[]>([]);
 
-  const videos = [
-    { id: 1, title: 'Видео 1', description: 'Описание видео 1' },
-    { id: 2, title: 'Видео 2', description: 'Описание видео 2' },
-    { id: 3, title: 'Видео 3', description: 'Описание видео 3' },
-    { id: 4, title: 'Видео 4', description: 'Описание видео 4' },
-    { id: 5, title: 'Видео 5', description: 'Описание видео 5' },
-    { id: 6, title: 'Видео 6', description: 'Описание видео 6' },
-  ];
-
-  const filteredVideos = useMemo(() => {
-    if (!search.trim()) {
-      return videos.slice(0, 6);
+  const loadExercises = useCallback(async () => {
+    try {
+      const data = await apiService.getExercises(search || undefined);
+      setExercises(data);
+    } catch (error) {
+      console.error('Error loading exercises:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    const query = search.toLowerCase().trim();
-    return videos.filter(video => 
-      video.title.toLowerCase().includes(query) ||
-      video.description.toLowerCase().includes(query)
-    );
   }, [search]);
 
-  const videosToShow = search.trim() ? filteredVideos : videos.slice(0, 6);
+  const loadRecommended = useCallback(async () => {
+    try {
+      const data = await apiService.getRecommended();
+      setRecommended(data);
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadExercises();
+  }, [loadExercises]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadExercises();
+      loadRecommended();
+    }, [loadExercises, loadRecommended]),
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadExercises();
+    setRefreshing(false);
+  };
+
+  const handleToggleFavorite = async (exercise: Exercise) => {
+    try {
+      const updater = (prev: Exercise[]) =>
+        prev.map(ex =>
+          ex.id === exercise.id
+            ? { ...ex, is_favorite: exercise.is_favorite === 1 ? 0 : 1 }
+            : ex,
+        );
+
+      if (exercise.is_favorite === 1) {
+        await apiService.removeFromFavorites(exercise.id);
+      } else {
+        await apiService.addToFavorites(exercise.id);
+      }
+
+      setExercises(updater);
+      setRecommended(updater);
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
+
+  const handleVideoPress = (video: Exercise) => {
+    navigation.navigate('ShowVideo', { video });
+  };
 
   const handleChangeText = (text: string) => {
     setSearch(text);
-    setShowSearchResults(!!text.trim());
-  };
-
-  const handleSearch = () => {
-    if (search.trim()) {
-      console.log('Поиск:', search);
-    }
   };
 
   const handleClear = () => {
     setSearch('');
-    setShowSearchResults(false);
   };
 
-  const handleVideoPress = (video: Video) => {
-  navigation.navigate('ShowVideo', { video });
+  const getVideoThumbnail = (exercise: Exercise) => {
+    return thumbnailByCategory[exercise.category] ?? thumbnailByCategory.body;
   };
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <SearchBox 
+      <SearchBox
         value={search}
         onChangeText={handleChangeText}
-        onSearch={handleSearch}
+        onSearch={() => {}}
         onClear={handleClear}
-        />
-        
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} 
+      />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        >
-            
-          {showSearchResults && search.trim() ? (
-            <View style={styles.section}>
-              <View style={styles.searchResultsHeader}>
-                <Text style={[styles.searchResultsTitle, { color: colors.text }]}>
-                  Результаты поиска
-                </Text>
-                <Text style={[styles.resultsCount, { color: colors.primary }]}>
-                  Найдено: {filteredVideos.length}
-                </Text>
-              </View>
-              
-              {filteredVideos.length === 0 ? (
-                <View style={styles.noResultsContainer}>
-                  <Text style={[styles.noResultsText, { color: colors.text }]}>
-                    По запросу "{search}" ничего не найдено
-                  </Text>
-                </View>
-            ) : (
-              <View style={styles.videosGrid}>
-                {filteredVideos.map((video) => (
-                  <TouchableOpacity 
-                    key={video.id} 
-                    style={styles.videoCard}
-                    onPress= {() => handleVideoPress(video)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.videoPlaceholder, { backgroundColor: colors.card }]}>
-                      <Text style={[styles.videoPlaceholderText, { color: colors.text }]}>
-                        Видео {video.id}
-                      </Text>
-                      <TouchableOpacity 
-                        style={styles.heartButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(video);
-                        }}
-                      >
-                        <Image 
-                          source={isFavorite(video.id) 
-                            ? require('../assets/icons/favorite.png') 
-                            : require('../assets/icons/add-to-favorites.png')} 
-                          style={[styles.heartIcon, { 
-                            tintColor: colors.primary 
-                          }]}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={[styles.videoTitle, { color: colors.text }]}>
-                      {video.title}
-                    </Text>
-                    <Text style={[styles.videoDescription, { color: colors.text }]}>
-                      {video.description}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        ) : (
-          <>
-            <Category />
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        <Category />
 
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Рекомендации</Text>
-              <View style={styles.videosGrid}>
-                {videosToShow.map((video) => (
-                  <TouchableOpacity 
-                    key={video.id} 
-                    style={styles.videoCard}
-                    onPress= {() => handleVideoPress(video)}
-                    activeOpacity={0.7}
+        {recommended.length > 0 && !search && (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              Рекомендовано для вас
+            </Text>
+            <View style={styles.videosGrid}>
+              {recommended.map((exercise) => (
+                <TouchableOpacity
+                  key={`rec-${exercise.id}`}
+                  style={styles.videoCard}
+                  onPress={() => handleVideoPress(exercise)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.videoPlaceholder,
+                      { backgroundColor: colors.card },
+                    ]}
                   >
-                    <View style={[styles.videoPlaceholder, { backgroundColor: colors.card }]}>
-                      <Text style={[styles.videoPlaceholderText, { color: colors.text }]}>
-                        Видео {video.id}
-                      </Text>
-                      <TouchableOpacity 
-                        style={styles.heartButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          toggleFavorite(video);
-                        }}
-                      >
-                        <Image 
-                          source={isFavorite(video.id) 
-                            ? require('../assets/icons/favorite.png') 
-                            : require('../assets/icons/add-to-favorites.png')} 
-                          style={[styles.heartIcon, { 
-                            tintColor: colors.primary 
-                          }]}
-                        />
-                      </TouchableOpacity>
+                    <Image
+                      source={getVideoThumbnail(exercise)}
+                      style={styles.videoThumbnail}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.playIconContainer}>
+                      <Image
+                        source={require('../assets/icons/play.png')}
+                        style={styles.playIconWhite}
+                      />
                     </View>
-                    <Text style={[styles.videoTitle, { color: colors.text }]}>
-                      {video.title}
-                    </Text>
-                    <Text style={[styles.videoDescription, { color: colors.text }]}>
-                      {video.description}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                    <TouchableOpacity
+                      style={styles.heartButton}
+                      onPress={e => {
+                        e.stopPropagation();
+                        handleToggleFavorite(exercise);
+                      }}
+                    >
+                      <Image
+                        source={
+                          exercise.is_favorite === 1
+                            ? require('../assets/icons/favorite.png')
+                            : require('../assets/icons/add-to-favorites.png')
+                        }
+                        style={[
+                          styles.heartIcon,
+                          { tintColor: colors.primary },
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <Text
+                    style={[styles.videoTitle, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {exercise.title}
+                  </Text>
+                  <Text
+                    style={[styles.videoDescription, { color: colors.text }]}
+                    numberOfLines={2}
+                  >
+                    {exercise.description}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          </>
+          </View>
         )}
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            Все упражнения
+          </Text>
+
+          {exercises.length === 0 ? (
+            <View style={styles.noResultsContainer}>
+              <Text style={[styles.noResultsText, { color: colors.text }]}>
+                {search
+                  ? `По запросу "${search}" ничего не найдено`
+                  : 'Нет доступных упражнений'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.videosGrid}>
+              {exercises.map((exercise) => (
+                <TouchableOpacity
+                  key={exercise.id}
+                  style={styles.videoCard}
+                  onPress={() => handleVideoPress(exercise)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.videoPlaceholder,
+                      { backgroundColor: colors.card },
+                    ]}
+                  >
+                    <Image
+                      source={getVideoThumbnail(exercise)}
+                      style={styles.videoThumbnail}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.playIconContainer}>
+                      <Image
+                        source={require('../assets/icons/play.png')}
+                        style={styles.playIconWhite}
+                      />
+                    </View>
+                    <TouchableOpacity
+                      style={styles.heartButton}
+                      onPress={e => {
+                        e.stopPropagation();
+                        handleToggleFavorite(exercise);
+                      }}
+                    >
+                      <Image
+                        source={
+                          exercise.is_favorite === 1
+                            ? require('../assets/icons/favorite.png')
+                            : require('../assets/icons/add-to-favorites.png')
+                        }
+                        style={[
+                          styles.heartIcon,
+                          { tintColor: colors.primary },
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  <Text
+                    style={[styles.videoTitle, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {exercise.title}
+                  </Text>
+                  <Text
+                    style={[styles.videoDescription, { color: colors.text }]}
+                    numberOfLines={2}
+                  >
+                    {exercise.description}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <BottomMenu />
     </View>
   );
 };
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
@@ -237,11 +345,18 @@ const styles = StyleSheet.create({
   },
   videoPlaceholder: {
     width: '100%',
-    aspectRatio: 16/9,
+    aspectRatio: 16 / 9,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  videoThumbnail: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
   },
   videoPlaceholderText: {
     fontSize: 14,
@@ -258,11 +373,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    width: 32,
-    height: 32,
-    backgroundColor: 'transparent',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 2,
   },
   heartIcon: {
     width: 24,
@@ -290,6 +407,27 @@ const styles = StyleSheet.create({
   noResultsText: {
     fontSize: 16,
     textAlign: 'center',
+  },
+  playIconContainer: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  playIcon: {
+    width: 24,
+    height: 24,
+    marginLeft: 2,
+  },
+  playIconWhite: {
+    width: 24,
+    height: 24,
+    marginLeft: 2,
+    tintColor: 'white',
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import { apiService } from '../services/api';
+import { useTheme } from './ThemeContext';
 
 type RootStackParamList = {
   Login: undefined;
@@ -18,14 +22,41 @@ type RootStackParamList = {
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 const LoginScreen = () => {
-  const [login, setLogin] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigation = useNavigation<LoginScreenNavigationProp>();
+  const { setThemeFromServer } = useTheme();
+  
+  useEffect(() => {
+    const clearOldData = async () => {
+      await apiService.logout();
+    };
+    clearOldData();
+  }, []);
 
-  const handleLogin = () => {
-    console.log('Логин:', login);
-    console.log('Пароль:', password);
-    navigation.navigate('Main');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Ошибка', 'Пожалуйста, заполните все поля');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await apiService.login(email, password);
+      await apiService.saveAuthData(response.access_token, email);
+      
+      const profile = await apiService.getProfile();
+      setThemeFromServer(profile.theme || 'light');
+      
+      navigation.navigate('Main');
+    } catch (error: any) {
+      console.error('Login error:', error);
+      Alert.alert('Ошибка', error.message || 'Неверный email или пароль');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRegister = () => {
@@ -45,10 +76,12 @@ const LoginScreen = () => {
       <View style={styles.form}>
         <TextInput
           style={styles.input}
-          placeholder="Логин"
-          value={login}
-          onChangeText={setLogin}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
           placeholderTextColor="#999"
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
         
         <TextInput
@@ -60,8 +93,16 @@ const LoginScreen = () => {
           placeholderTextColor="#999"
         />
 
-        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Вход</Text>
+        <TouchableOpacity 
+          style={[styles.loginButton, loading && styles.disabledButton]} 
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.loginButtonText}>Войти</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.registerLink} onPress={handleRegister}>
@@ -134,6 +175,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     textDecorationLine: 'none',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode} from 'react';
 
 type ThemeType = 'light' | 'dark';
 
@@ -19,7 +19,9 @@ interface ThemeColors {
 interface ThemeContextType {
   theme: ThemeType;
   colors: ThemeColors;
-  toggleTheme: (theme: ThemeType) => void;
+  toggleTheme: () => void;
+  setThemeFromServer: (theme: string) => void;
+  getCurrentTheme: () => ThemeType;
 }
 
 const lightColors: ThemeColors = {
@@ -56,13 +58,26 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [theme, setTheme] = useState<ThemeType>('light');
   const [colors, setColors] = useState<ThemeColors>(lightColors);
 
-  const toggleTheme = (selectedTheme: ThemeType) => {
-    setTheme(selectedTheme);
-    setColors(selectedTheme === 'light' ? lightColors : darkColors);
+  const setThemeFromServer = (serverTheme: string) => {
+    if (serverTheme === 'dark') {
+      setTheme('dark');
+      setColors(darkColors);
+    } else {
+      setTheme('light');
+      setColors(lightColors);
+    }
   };
 
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    setColors(newTheme === 'light' ? lightColors : darkColors);
+  };
+
+  const getCurrentTheme = () => theme;
+
   return (
-    <ThemeContext.Provider value={{ theme, colors, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, colors, toggleTheme, setThemeFromServer, getCurrentTheme }}>
       {children}
     </ThemeContext.Provider>
   );

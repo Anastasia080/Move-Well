@@ -1,11 +1,15 @@
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 
-/**
- * Metro configuration
- * https://reactnative.dev/docs/metro
- *
- * @type {import('@react-native/metro-config').MetroConfig}
- */
-const config = {};
+const defaultConfig = getDefaultConfig(__dirname);
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+const config = {
+  watchman: false,
+  resolver: {
+    assetExts: [
+      ...defaultConfig.resolver.assetExts,
+      'mp4', 'mov', 'avi', 'wmv', 'm4v',
+    ],
+  },
+};
+
+module.exports = mergeConfig(defaultConfig, config);

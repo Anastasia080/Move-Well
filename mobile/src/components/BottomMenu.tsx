@@ -10,7 +10,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from './ThemeContext';
 
 type RootStackParamList = {
-  Profile: undefined;
+  Profile: { isNewUser?: boolean } | undefined;
   Main: undefined;
   Favorite: undefined;
   Settings: undefined;
@@ -31,7 +31,7 @@ const BottomMenu = () => {
   };
 
   const handleProfile = () => {
-    navigation.navigate('Profile');
+    navigation.navigate('Profile', { isNewUser: false });
   };
 
   const handleSettings = () => {

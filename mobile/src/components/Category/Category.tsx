@@ -9,26 +9,26 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 
 type RootStackParamList = {
-  Legs: undefined;
-  Hands: undefined;
-  Body: undefined;
-  All: undefined;
+  Legs: { category: string } | undefined;
+  Hands: { category: string } | undefined;
+  Body: { category: string } | undefined;
+  All: { category: string } | undefined;
 };
 type CategoryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const Category = () => {
     const { colors } = useTheme();
+    const navigation = useNavigation<CategoryScreenNavigationProp>();
+
     const categories = [
-    { id: 1, title: 'Ноги', screen: 'Legs' },
-    { id: 2, title: 'Руки', screen: 'Hands' },
-    { id: 3, title: 'Корпус', screen: 'Body' },
-    { id: 4, title: 'Все', screen: 'All' },
+    { id: 1, title: 'Ноги', screen: 'Legs', category: 'legs' },
+    { id: 2, title: 'Руки', screen: 'Hands', category: 'hands' },
+    { id: 3, title: 'Корпус', screen: 'Body', category: 'body' },
+    { id: 4, title: 'Все', screen: 'All', category: '' },
   ];
 
-  const navigation = useNavigation<CategoryScreenNavigationProp>();
-
-  const handleCategoryPress = (screenName: keyof RootStackParamList) => {
-    navigation.navigate(screenName);
+  const handleCategoryPress = (screenName: keyof RootStackParamList, category: string) => {
+    navigation.navigate(screenName as any, { category });
   };
 
 
@@ -40,7 +40,7 @@ const Category = () => {
               <TouchableOpacity 
                 key={category.id}
                 style={[styles.categoryItem, { backgroundColor: colors.primary }]}
-                onPress={() => handleCategoryPress(category.screen as keyof RootStackParamList)}
+                onPress={() => handleCategoryPress(category.screen as keyof RootStackParamList, category.category)}
               >
                 <Text style={styles.categoryText}>{category.title}</Text>
               </TouchableOpacity>

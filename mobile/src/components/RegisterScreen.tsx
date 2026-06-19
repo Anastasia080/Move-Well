@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,29 +6,84 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import { apiService } from '../services/api';
 
 type RootStackParamList = {
   Login: undefined;
   Register: undefined;
-  About: undefined;
+  About: { isNewUser?: boolean } | undefined;
 };
 
-type RegisterScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Register'>;
+type RegisterScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Register'
+>;
 
 const RegisterScreen = () => {
-  const [login, setLogin] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigation = useNavigation<RegisterScreenNavigationProp>();
 
-  const handleRegister = () => {
-    console.log('Регистрация - Логин:', login);
-    console.log('Пароль:', password);
-    console.log('Подтверждение пароля:', confirmPassword);
-    navigation.navigate('About');
+  useEffect(() => {
+    const clearOldData = async () => {
+      await apiService.logout();
+    };
+    clearOldData();
+  }, []);
+
+  const handleRegister = async () => {
+    if (!email || !password || !confirmPassword) {
+      Alert.alert('Ошибка', 'Пожалуйста, заполните все поля');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert('Ошибка', 'Пароли не совпадают');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Ошибка', 'Пароль должен содержать минимум 6 символов');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('Ошибка', 'Введите корректный email');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await apiService.register({
+        email,
+        password,
+        diagnosis: [],
+        mobility_limits: [],
+      });
+
+      await apiService.saveAuthData(response.access_token, email);
+
+      Alert.alert('Успех', 'Регистрация прошла успешно!', [
+        {
+          text: 'OK',
+          onPress: () => navigation.navigate('About', { isNewUser: true }),
+        },
+      ]);
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      Alert.alert('Ошибка', error.message || 'Ошибка при регистрации');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBackToLogin = () => {
@@ -38,25 +93,23 @@ const RegisterScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Image 
-          source={require('../assets/logo.png')} 
-          style={styles.logo} 
-        />
+        <Image source={require('../assets/logo.png')} style={styles.logo} />
         <Text style={styles.appName}>Move Well</Text>
       </View>
 
       <View style={styles.form}>
-
         <Text style={styles.registerTitle}>Регистрация</Text>
 
         <TextInput
           style={styles.input}
-          placeholder="Логин"
-          value={login}
-          onChangeText={setLogin}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
           placeholderTextColor="#999"
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
-        
+
         <TextInput
           style={styles.input}
           placeholder="Пароль"
@@ -75,8 +128,16 @@ const RegisterScreen = () => {
           placeholderTextColor="#999"
         />
 
-        <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-          <Text style={styles.registerButtonText}>Зарегистрироваться</Text>
+        <TouchableOpacity
+          style={[styles.registerButton, loading && styles.disabledButton]}
+          onPress={handleRegister}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.registerButtonText}>Зарегистрироваться</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.loginLink} onPress={handleBackToLogin}>
@@ -105,7 +166,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 200,
     height: 100,
-    resizeMode: 'contain', 
+    resizeMode: 'contain',
   },
   appName: {
     fontSize: 28,
@@ -153,6 +214,9 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });
 

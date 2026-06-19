@@ -1,37 +1,62 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTheme } from './ThemeContext';
+import {apiService} from '../services/api';
 
 type RootStackParamList = {
-  Profile: undefined;
+  Profile: { isNewUser?: boolean } | undefined;
   Settings: undefined;
-  About: { previousScreen?: string } | undefined;
+  About: { isNewUser?: boolean; previousScreen?: string } | undefined;
 };
 type AboutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'About'>;
 type AboutScreenRouteProp = RouteProp<RootStackParamList, 'About'>;
 const About = () => {
   const navigation = useNavigation<AboutScreenNavigationProp>();
   const route = useRoute<AboutScreenRouteProp>();
-  const { colors } = useTheme();
-
+  const { colors, setThemeFromServer } = useTheme();
+  const [loading, setLoading] = useState(true);
   const previousRoute = route.params?.previousScreen || '';
   const isFromSettings = previousRoute === 'Settings';
-  
+  const isNewUser = route.params?.isNewUser || false;
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const profile = await apiService.getProfile();
+        setThemeFromServer(profile.theme || 'light');
+      } catch (error) {
+        console.error('Error loading theme:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadTheme();
+  }, []);
+
   const handleButtonPress = () => {
     if (isFromSettings) {
       navigation.goBack();
     } else {
-      navigation.navigate('Profile');
+      navigation.navigate('Profile', { isNewUser: isNewUser });
     }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -70,6 +95,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 24,
     justifyContent: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     display: 'flex',
